@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>☁️ Subir Archivos a Cloudinary</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+ <link rel="stylesheet" href="/style1.css">
+
+</head>
+<body class="container py-4">
+  <h2 class="mb-4">☁️ Subir Archivos a Cloudinary</h2>
+
+  <p>
+    Este proyecto permite subir y almacenar archivos de varios tipos (imágenes, documentos PDF, archivos Word, videos, etc.) 
+    directamente a Cloudinary. Puedes subir un archivo desde tu dispositivo o usar la URL directa del archivo para subirlo a la nube. 
+    Después de subirlo, verás una lista con los archivos que has subido junto con una vista previa o un ícono según su tipo.
+  </p>
+
+  <form id="upload-form" enctype="multipart/form-data" class="mb-3">
+    <div class="mb-3">
+      <label for="fileInput" class="form-label">Seleccionar archivo local:</label>
+      <input class="form-control" type="file" name="file" id="fileInput" />
+    </div>
+
+    <div class="mb-3">
+      <label for="urlInput" class="form-label">O URL de archivo:</label>
+      <input class="form-control" type="text" name="imageUrl" id="urlInput" placeholder="https://example.com/archivo.jpg" />
+    </div>
+
+    <button class="btn btn-primary" type="submit">Subir</button>
+  </form>
+
+  <div class="mb-3">
+    <div class="progress" style="height: 20px; display:none;">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;"></div>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <hr />
+  <h4>Archivos subidos</h4>
+  <ul id="uploadedFiles" class="list-group"></ul>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    const fileInput = document.getElementById('fileInput');
+    const urlInput = document.getElementById('urlInput');
+    const resultDiv = document.getElementById('result');
+    const progressBar = document.querySelector('.progress');
+    const progressBarInner = document.querySelector('.progress-bar');
+    const uploadedFilesList = document.getElementById('uploadedFiles');
+
+    const allowedTypes = [
+      'image/jpeg', 'image/png', 'image/gif',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'video/mp4', 'video/quicktime'
+    ];
+
+    // Mantener lista en memoria (puedes guardar en backend si quieres)
+    const uploadedFiles = [];
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      resultDiv.innerHTML = '';
+
+      const file = fileInput.files[0];
+      const url = urlInput.value.trim();
+      const formData = new FormData();
+
+      if (file) {
+        if (!allowedTypes.includes(file.type)) {
+          resultDiv.innerHTML = `<div class="alert alert-danger">❌ Tipo de archivo no permitido: ${file.type}</div>`;
+          return;
+        }
+        formData.append('file', file);
+      } else if (url) {
+        formData.append('imageUrl', url);
+      } else {
+        resultDiv.innerHTML = '<div class="alert alert-danger">❌ Debes seleccionar un archivo o ingresar una URL.</div>';
+        return;
+      }
+
+      // Mostrar barra progreso
+      progressBar.style.display = 'block';
+      progressBarInner.style.width = '0%';
+
+      try {
+        const res = await fetch('/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (data.url) {
+          progressBarInner.style.width = '100%';
+
+          const ext = data.url.split('.').pop().split('?')[0];
+
+          const fileName = file ? file.name : 'Desde URL';
+
+          resultDiv.innerHTML = `
+            <div class="alert alert-success">✅ Archivo subido correctamente.</div>
+          `;
+
+          // Añadir archivo a la lista
+          addFileToList({ name: fileName, url: data.url, ext });
+
+          // Reset formulario y barra progreso
+          form.reset();
+          progressBar.style.display = 'none';
+          progressBarInner.style.width = '0%';
+
+        } else {
+          progressBar.style.display = 'none';
+          resultDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+        }
+      } catch (err) {
+        progressBar.style.display = 'none';
+        resultDiv.innerHTML = `<div class="alert alert-danger">❌ Error al subir: ${err.message}</div>`;
+      }
+    });
+
+    function addFileToList({ name, url, ext }) {
+  const li = document.createElement('li');
+  li.className = 'list-group-item'; // Mantener la clase de Bootstrap si la usas, o eliminarla si no.
+
+  let previewHtml = '';
+  let fileNameDisplay = name; // Por defecto el nombre completo
+
+  // Determinar tipo de archivo para la previsualización
+  if (ext.match(/(jpg|jpeg|png|gif)/i)) { // Añadido 'i' para case-insensitivity
+    previewHtml = `<img src="${url}" alt="Vista previa de imagen"/>`;
+  } else if (ext.match(/(mp4|mov|webm)/i)) { // Añadidos más formatos de video
+    previewHtml = `<video controls><source src="${url}" type="video/${ext}">Tu navegador no soporta video.</video>`;
+  } else if (ext.match(/(pdf)/i)) {
+    previewHtml = `<span class="file-icon">📄</span>`; // Ícono de PDF
+  } else if (ext.match(/(doc|docx)/i)) {
+    previewHtml = `<span class="file-icon">📄</span>`; // Ícono de Word
+  } else {
+    previewHtml = `<span class="file-icon">📁</span>`; // Ícono genérico de archivo
+  }
+
+  // Cortar el nombre del archivo si es muy largo
+  if (name.length > 30) {
+    fileNameDisplay = name.substring(0, 27) + '...';
+  }
+
+  li.innerHTML = `
+    <div class="file-preview-container">
+      ${previewHtml}
+    </div>
+    <div class="file-details">
+      <span>${fileNameDisplay}</span>
+      <a href="${url}" target="_blank" rel="noopener noreferrer" class="file-link">Ver/Descargar</a>
+    </div>
+  `;
+
+  uploadedFilesList.appendChild(li);
+  uploadedFiles.push({ name, url, ext });
+
+  // Animación al añadir un nuevo elemento
+  setTimeout(() => {
+    li.style.opacity = '1';
+    li.style.transform = 'translateY(0)';
+  }, 10); // Pequeño retraso para que la animación se dispare
+}
+  </script>
+</body>
+
+</html>
